@@ -7,6 +7,9 @@ import com.mybatisflex.core.service.IService;
 import com.ryan.aicodegenerator.dto.request.AppQueryRequest;
 import com.ryan.aicodegenerator.dto.response.AppVO;
 import com.ryan.aicodegenerator.model.entity.App;
+import com.ryan.aicodegenerator.model.entity.User;
+
+import reactor.core.publisher.Flux;
 
 /**
  * 应用 服务层。
@@ -38,4 +41,14 @@ public interface AppService extends IService<App> {
      * @return 应用视图对象列表
      */
     List<AppVO> getAppVOList(List<App> appList);
+
+    /**
+     * 对话生成代码应用
+     *
+     * @param appId
+     * @param message
+     * @param loginUser
+     * @return
+     */
+    Flux<String> chatToGenCode(Long appId, String message, User loginUser);
 }

@@ -9,22 +9,28 @@ import java.util.stream.Collectors;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
+import com.ryan.aicodegenerator.core.AiCodeGeneratorFacade;
 import com.ryan.aicodegenerator.dto.request.AppQueryRequest;
 import com.ryan.aicodegenerator.dto.response.AppVO;
 import com.ryan.aicodegenerator.dto.response.UserVO;
+import com.ryan.aicodegenerator.enums.CodeGenTypeEnum;
 import com.ryan.aicodegenerator.exception.BizException;
 import com.ryan.aicodegenerator.exception.ErrorCode;
+import com.ryan.aicodegenerator.exception.ThrowUtils;
 import com.ryan.aicodegenerator.model.entity.App;
 import com.ryan.aicodegenerator.model.entity.User;
 import com.ryan.aicodegenerator.model.mapper.AppMapper;
 import com.ryan.aicodegenerator.model.service.AppService;
 import com.ryan.aicodegenerator.model.service.UserService;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 import jakarta.annotation.Resource;
+import reactor.core.publisher.Flux;
 
 /**
  * 应用 服务层实现。
@@ -36,6 +42,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
 
     @Resource
     private UserService userService;
+
+    @Autowired
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     @Override
     public AppVO getAppVO(App app) {
@@ -105,5 +114,27 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
                 .eq("priority", priority)
                 .eq("userId", userId)
                 .orderBy(sortField, "ascend".equals(sortOrder));
+    }
+
+    @Override
+    public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
+        // 1. 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        // 2. 查询应用信息
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        // 3. 验证用户是否有权限访问该应用，仅本人可以生成代码
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BizException(ErrorCode.NO_AUTH_ERROR, "无权限访问该应用");
+        }
+        // 4. 获取应用的代码生成类型
+        String codeGenTypeStr = app.getCodeGenType();
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenTypeStr);
+        if (codeGenTypeEnum == null) {
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
+        }
+        // 5. 调用 AI 生成代码
+        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
     }
 }
