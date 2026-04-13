@@ -3,6 +3,7 @@ package com.ryan.aicodegenerator.core.saver;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 
+import com.ryan.aicodegenerator.consts.AppConstant;
 import com.ryan.aicodegenerator.enums.CodeGenTypeEnum;
 import com.ryan.aicodegenerator.exception.BizException;
 import com.ryan.aicodegenerator.exception.ErrorCode;
@@ -19,7 +20,7 @@ import cn.hutool.core.util.StrUtil;
 public abstract class CodeFileSaverTemplate<T> {
 
     // 文件保存根目录
-    protected static final String FILE_SAVE_ROOT_DIR = System.getProperty("user.dir") + "/tmp/code_output";
+    protected static final String FILE_SAVE_ROOT_DIR = AppConstant.CODE_OUTPUT_ROOT_DIR;
 
     /**
      * 模板方法：保存代码的标准流程（使用 appId）

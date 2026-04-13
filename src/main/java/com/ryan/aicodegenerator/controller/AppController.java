@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import com.ryan.aicodegenerator.dto.request.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -21,10 +22,6 @@ import com.ryan.aicodegenerator.common.DeleteRequest;
 import com.ryan.aicodegenerator.common.ResultUtils;
 import com.ryan.aicodegenerator.consts.AppConstant;
 import com.ryan.aicodegenerator.consts.UserConstant;
-import com.ryan.aicodegenerator.dto.request.AppAddRequest;
-import com.ryan.aicodegenerator.dto.request.AppAdminUpdateRequest;
-import com.ryan.aicodegenerator.dto.request.AppQueryRequest;
-import com.ryan.aicodegenerator.dto.request.AppUpdateRequest;
 import com.ryan.aicodegenerator.dto.response.AppVO;
 import com.ryan.aicodegenerator.enums.CodeGenTypeEnum;
 import com.ryan.aicodegenerator.exception.BizException;
@@ -316,6 +313,25 @@ public class AppController {
                                 .data("")
                                 .build()
                 ));
+    }
+
+    /**
+     * 应用部署
+     *
+     * @param appDeployRequest 部署请求
+     * @param request          请求
+     * @return 部署 URL
+     */
+    @PostMapping("/deploy")
+    public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(appDeployRequest == null, ErrorCode.PARAMS_ERROR);
+        Long appId = appDeployRequest.getAppId();
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        // 获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+        // 调用服务部署应用
+        String deployUrl = appService.deployApp(appId, loginUser);
+        return ResultUtils.success(deployUrl);
     }
 
 }
