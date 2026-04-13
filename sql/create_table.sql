@@ -3,10 +3,10 @@
 # @from <a href="https://codefather.cn">编程导航学习圈</a>
 
 -- 创建库
-create database if not exists yu_ai_code_mother;
+create database if not exists ai_code_generator;
 
 -- 切换库
-use yu_ai_code_mother;
+use ai_code_generator;
 
 -- 用户表
 -- 以下是建表语句
