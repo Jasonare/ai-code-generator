@@ -1,15 +1,10 @@
 package com.ryan.aicodegenerator.model.service.impl;
 
-import java.io.File;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -26,30 +21,41 @@ import com.ryan.aicodegenerator.model.entity.App;
 import com.ryan.aicodegenerator.model.entity.User;
 import com.ryan.aicodegenerator.model.mapper.AppMapper;
 import com.ryan.aicodegenerator.model.service.AppService;
+import com.ryan.aicodegenerator.model.service.ChatHistoryService;
 import com.ryan.aicodegenerator.model.service.UserService;
-
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import jakarta.annotation.Resource;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
+import java.io.File;
+import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
- * 应用 服务层实现。
+ * 应用 服务层实现
  *
  * @author Jasonare
  */
 @Service
-public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppService{
+@Slf4j
+public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
 
     @Resource
     private UserService userService;
 
     @Autowired
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+
+    @Resource
+    private ChatHistoryService chatHistoryService;
 
     @Override
     public AppVO getAppVO(App app) {
@@ -129,18 +135,42 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         // 2. 查询应用信息
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 3. 验证用户是否有权限访问该应用，仅本人可以生成代码
+        // 3. 校验用户是否有权限访问该应用，仅本人可以生成代码
         if (!app.getUserId().equals(loginUser.getId())) {
             throw new BizException(ErrorCode.NO_AUTH_ERROR, "无权限访问该应用");
         }
-        // 4. 获取应用的代码生成类型
+        // 4. 用户消息先落库
+        chatHistoryService.saveUserMessage(appId, loginUser.getId(), message);
+        // 5. 获取应用的代码生成类型
         String codeGenTypeStr = app.getCodeGenType();
         CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenTypeStr);
         if (codeGenTypeEnum == null) {
-            throw new BizException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
+            String errorMessage = "不支持的代码生成类型";
+            chatHistoryService.saveAiErrorMessage(appId, loginUser.getId(), errorMessage);
+            throw new BizException(ErrorCode.SYSTEM_ERROR, errorMessage);
         }
-        // 5. 调用 AI 生成代码
-        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        // 6. 调用 AI 生成代码，成功保存 AI 消息，失败保存错误消息
+        StringBuilder aiMessageBuilder = new StringBuilder();
+        try {
+            return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId)
+                    .doOnNext(aiMessageBuilder::append)
+                    .doOnComplete(() -> {
+                        String aiMessage = StrUtil.blankToDefault(aiMessageBuilder.toString(), "AI 回复为空");
+                        chatHistoryService.saveAiMessage(appId, loginUser.getId(), aiMessage);
+                    })
+                    .doOnError(throwable -> {
+                        String errorMessage = "AI 回复失败：" + StrUtil.blankToDefault(throwable.getMessage(), "未知错误");
+                        try {
+                            chatHistoryService.saveAiErrorMessage(appId, loginUser.getId(), errorMessage);
+                        } catch (Exception e) {
+                            log.error("保存 AI 错误消息失败: {}", e.getMessage(), e);
+                        }
+                    });
+        } catch (Exception e) {
+            String errorMessage = "AI 回复失败：" + StrUtil.blankToDefault(e.getMessage(), "未知错误");
+            chatHistoryService.saveAiErrorMessage(appId, loginUser.getId(), errorMessage);
+            throw e;
+        }
     }
 
     @Override
@@ -151,7 +181,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         // 2. 查询应用信息
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 3. 验证用户是否有权限部署该应用，仅本人可以部署
+        // 3. 校验用户是否有权限部署该应用，仅本人可以部署
         if (!app.getUserId().equals(loginUser.getId())) {
             throw new BizException(ErrorCode.NO_AUTH_ERROR, "无权限部署该应用");
         }
@@ -186,5 +216,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
         // 9. 返回可访问的 URL
         return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean removeById(Serializable id) {
+        ThrowUtils.throwIf(id == null, ErrorCode.PARAMS_ERROR, "应用 id 不能为空");
+        Long appId = Long.parseLong(id.toString());
+        // 删除应用时级联清理对话历史，避免冗余数据
+        chatHistoryService.removeByAppId(appId);
+        return super.removeById(id);
     }
 }
