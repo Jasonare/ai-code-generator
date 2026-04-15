@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration scan="true" scanPeriod="30 seconds" debug="false">
+
+    <!-- 定义日志文件的存储地址 勿在 LogBack 的配置中使用相对路径 -->
+    <property name="LOG_HOME" value="./logs"/>
+    <!-- 日志文件的名称 -->
+    <property name="LOG_FILE_NAME" value="ai_code_generator"/>
+    <!-- 日志压缩类型 -->
+    <property name="COMPRESSION_TYPE" value="zip"/>
+    <!-- 最大文件大小 -->
+    <property name="MAX_FILE_SIZE" value="300MB"/>
+    <!-- 日志保留天数 -->
+    <property name="MAX_HISTORY" value="2"/>
+
+    <!-- Console 输出设置 -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder charset="UTF-8">
+            <pattern>%yellow(%date{yyyy-MM-dd HH:mm:ss}) |%highlight(%-5level) [%blue(%thread)] |%green(%logger:%line) |(%msg%n)
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- 输出到主流程BUSINESS -->
+    <appender name="BUSINESS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${LOG_FILE_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- 日志文件输出的文件名 -->
+            <FileNamePattern>${LOG_HOME}/business/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.%i.${COMPRESSION_TYPE}
+            </FileNamePattern>
+            <MaxHistory>${MAX_HISTORY}</MaxHistory>
+            <timeBasedFileNamingAndTriggeringPolicy
+                    class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %C.%M\(%line\) - %msg%n
+            </pattern>
+            <charset>utf-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC_BUSINESS" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="BUSINESS"/>
+        <includeCallerData>true</includeCallerData>
+    </appender>
+
+    <logger name="org.springframework.context" level="ERROR"/>
+    <logger name="org.springframework" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="ASYNC_BUSINESS"/>
+    </root>
+
+</configuration>  

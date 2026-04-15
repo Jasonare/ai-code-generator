@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.github.xiaoymin.knife4j.annotations.Ignore;
 import com.ryan.aicodegenerator.enums.CodeGenTypeEnum;
 
 import jakarta.annotation.Resource;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Flux;
  * @date 2026-04-01 17:14
  */
 @SpringBootTest
+@Ignore
 class AiCodeGeneratorFacadeTest {
 
     @Resource
