@@ -26,7 +26,7 @@ public interface AppConstant {
     /**
      * 应用部署目录
      */
-    String CODE_DEPLOY_ROOT_DIR = System.getProperty("user.dir") + "/tmp/code_deploy";
+    String CODE_DEPLOY_ROOT_DIR = "/www/wwwroot/106.54.208.184";
 
     /**
      * 应用部署域名
